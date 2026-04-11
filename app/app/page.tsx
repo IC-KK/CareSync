@@ -7,6 +7,13 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
 type AutoAction = {
@@ -203,15 +210,21 @@ export default function Home() {
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-slate-500">Role</span>
-            <select
+            <Select
               value={role}
-              onChange={(e) => setRole(e.target.value as Role)}
-              className="h-9 px-3 rounded-md border border-slate-200 bg-white text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-slate-900/10"
+              onValueChange={(v) => setRole(v as Role)}
             >
-              <option value="Nurse">Nurse</option>
-              <option value="Case Coordinator">Case Coordinator</option>
-              <option value="COO">COO</option>
-            </select>
+              <SelectTrigger className="h-9 min-w-[160px] text-sm font-medium text-slate-700 bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Nurse">Nurse</SelectItem>
+                <SelectItem value="Case Coordinator">
+                  Case Coordinator
+                </SelectItem>
+                <SelectItem value="COO">COO</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
       </header>
