@@ -9,6 +9,21 @@ import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 
+type SdohRow = {
+  id: string;
+  patient_id: string;
+  domain: string;
+  detail: string;
+  risk: "high" | "moderate" | "low";
+  created_at: string;
+};
+
+const RISK_STYLES: Record<SdohRow["risk"], string> = {
+  high: "bg-red-100 text-red-800 hover:bg-red-100 border-red-200",
+  moderate: "bg-amber-100 text-amber-800 hover:bg-amber-100 border-amber-200",
+  low: "bg-green-100 text-green-800 hover:bg-green-100 border-green-200",
+};
+
 const TABS = [
   { id: "day1", label: "Day 1 Intake" },
   { id: "discharge", label: "Discharge Readiness" },
@@ -38,6 +53,8 @@ export default function Home() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("day1");
   const [role, setRole] = useState<Role>("Nurse");
+  const [sdoh, setSdoh] = useState<SdohRow[]>([]);
+  const [sdohLoading, setSdohLoading] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -58,7 +75,30 @@ export default function Home() {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!selectedId) {
+      setSdoh([]);
+      return;
+    }
+    setSdohLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from("sdoh_screening")
+        .select("*")
+        .eq("patient_id", selectedId)
+        .order("created_at", { ascending: true });
+      if (error) console.error(error);
+      setSdoh((data ?? []) as SdohRow[]);
+      setSdohLoading(false);
+    })();
+  }, [selectedId]);
+
   const selected = patients.find((p) => p.id === selectedId) ?? null;
+  const riskCounts = {
+    high: sdoh.filter((r) => r.risk === "high").length,
+    moderate: sdoh.filter((r) => r.risk === "moderate").length,
+    low: sdoh.filter((r) => r.risk === "low").length,
+  };
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
@@ -199,12 +239,21 @@ export default function Home() {
                   {selected.room} · {selected.dx_primary}
                 </div>
               </div>
-              <Card className="p-8 border-dashed border-slate-300 bg-white">
-                <div className="text-sm text-slate-400">
-                  [{TABS.find((t) => t.id === activeTab)?.label}] content for{" "}
-                  {selected.full_name} — coming in a later phase. Role: {role}.
-                </div>
-              </Card>
+              {activeTab === "day1" ? (
+                <Day1Intake
+                  sdoh={sdoh}
+                  loading={sdohLoading}
+                  riskCounts={riskCounts}
+                />
+              ) : (
+                <Card className="p-8 border-dashed border-slate-300 bg-white">
+                  <div className="text-sm text-slate-400">
+                    [{TABS.find((t) => t.id === activeTab)?.label}] content for{" "}
+                    {selected.full_name} — coming in a later phase. Role:{" "}
+                    {role}.
+                  </div>
+                </Card>
+              )}
             </div>
           ) : (
             <div className="text-slate-400 text-sm">Select a patient…</div>
@@ -212,5 +261,102 @@ export default function Home() {
         </main>
       </div>
     </div>
+  );
+}
+
+function Day1Intake({
+  sdoh,
+  loading,
+  riskCounts,
+}: {
+  sdoh: SdohRow[];
+  loading: boolean;
+  riskCounts: { high: number; moderate: number; low: number };
+}) {
+  if (loading) {
+    return (
+      <div className="text-sm text-slate-400">Loading Day 1 intake…</div>
+    );
+  }
+
+  if (sdoh.length === 0) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="text-sm text-slate-400 text-center max-w-sm">
+          No Day 1 intake screening on file for this patient.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <section>
+      <div className="flex items-baseline justify-between mb-4">
+        <h2 className="text-base font-semibold text-slate-900">
+          Social Determinants of Health — Day 1 Screening
+        </h2>
+      </div>
+
+      <div className="flex items-center gap-2 mb-5">
+        <RiskPill count={riskCounts.high} label="high" risk="high" />
+        <span className="text-slate-300">·</span>
+        <RiskPill
+          count={riskCounts.moderate}
+          label="moderate"
+          risk="moderate"
+        />
+        <span className="text-slate-300">·</span>
+        <RiskPill count={riskCounts.low} label="low" risk="low" />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {sdoh.map((row) => (
+          <Card
+            key={row.id}
+            className="p-4 border border-slate-200 bg-white"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="font-semibold text-sm text-slate-900">
+                {row.domain}
+              </div>
+              <Badge
+                variant="secondary"
+                className={cn(
+                  "text-[10px] uppercase tracking-wide shrink-0 border",
+                  RISK_STYLES[row.risk]
+                )}
+              >
+                {row.risk}
+              </Badge>
+            </div>
+            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+              {row.detail}
+            </p>
+          </Card>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RiskPill({
+  count,
+  label,
+  risk,
+}: {
+  count: number;
+  label: string;
+  risk: SdohRow["risk"];
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+        RISK_STYLES[risk]
+      )}
+    >
+      <span className="tabular-nums font-semibold">{count}</span>
+      <span>{label}</span>
+    </span>
   );
 }
