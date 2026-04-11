@@ -25,6 +25,43 @@ const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> 
   "book-open": BookOpen,
 };
 
+const ACTION_ICON_COLORS: Record<string, string> = {
+  pill: "text-rose-500",
+  car: "text-sky-500",
+  calendar: "text-emerald-500",
+  "book-open": "text-violet-500",
+};
+
+const DAISY_MRN = "MRN-10234";
+
+const DAISY_TIMELINE = [
+  {
+    time: "07:15",
+    title: "Admitted to 4C-12",
+    detail: "Cardiology admit, Dr. Patel attending",
+  },
+  {
+    time: "08:30",
+    title: "Initial assessment complete",
+    detail: "Vitals, meds reconciled, NT-proBNP drawn",
+  },
+  {
+    time: "09:45",
+    title: "SDOH screening complete",
+    detail: "6 domains assessed, 2 high-risk flagged",
+  },
+  {
+    time: "10:20",
+    title: "Auto-actions triggered",
+    detail: "Pharmacy assistance, transport, follow-up, teach-back",
+  },
+  {
+    time: "11:00",
+    title: "Care team huddle",
+    detail: "Discharge target: Day 6, risk tier: high",
+  },
+];
+
 type SdohRow = {
   id: string;
   patient_id: string;
@@ -272,6 +309,7 @@ export default function Home() {
                   actions={actions}
                   loading={sdohLoading}
                   riskCounts={riskCounts}
+                  patientMrn={selected.mrn}
                 />
               ) : (
                 <Card className="p-8 border-dashed border-slate-300 bg-white">
@@ -297,12 +335,15 @@ function Day1Intake({
   actions,
   loading,
   riskCounts,
+  patientMrn,
 }: {
   sdoh: SdohRow[];
   actions: AutoAction[];
   loading: boolean;
   riskCounts: { high: number; moderate: number; low: number };
+  patientMrn: string;
 }) {
+  const showTimeline = patientMrn === DAISY_MRN;
   if (loading) {
     return (
       <div className="text-sm text-slate-400">Loading Day 1 intake…</div>
@@ -387,7 +428,12 @@ function Day1Intake({
                       Auto
                     </span>
                     <span className="h-8 w-8 rounded-md bg-slate-50 border border-slate-200 grid place-items-center shrink-0">
-                      <Icon className="h-4 w-4 text-slate-600" />
+                      <Icon
+                        className={cn(
+                          "h-4 w-4",
+                          ACTION_ICON_COLORS[a.icon] ?? "text-slate-500"
+                        )}
+                      />
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-slate-900">
@@ -402,6 +448,30 @@ function Day1Intake({
               })}
             </ul>
           </Card>
+        </section>
+      )}
+
+      {showTimeline && (
+        <section>
+          <h3 className="text-sm font-semibold text-slate-900 mb-4">
+            Day 1 Timeline
+          </h3>
+          <ol className="relative border-l border-slate-200 ml-20 space-y-6">
+            {DAISY_TIMELINE.map((item, i) => (
+              <li key={i} className="relative pl-6">
+                <span className="absolute -left-[5px] top-1.5 h-2.5 w-2.5 rounded-full bg-white border-2 border-slate-400" />
+                <span className="absolute -left-24 top-0 w-16 text-right text-xs font-medium text-slate-500 tabular-nums">
+                  {item.time}
+                </span>
+                <div className="text-sm font-semibold text-slate-900">
+                  {item.title}
+                </div>
+                <div className="text-xs text-slate-500 mt-0.5">
+                  {item.detail}
+                </div>
+              </li>
+            ))}
+          </ol>
         </section>
       )}
     </div>
