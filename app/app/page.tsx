@@ -1,13 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, Pill, Car, Calendar, BookOpen, CheckCircle, Zap } from "lucide-react";
 import { supabase, type Patient } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+
+type AutoAction = {
+  id: string;
+  patient_id: string;
+  icon: string;
+  label: string;
+  detail: string;
+  created_at: string;
+};
+
+const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+  pill: Pill,
+  car: Car,
+  calendar: Calendar,
+  "book-open": BookOpen,
+};
 
 type SdohRow = {
   id: string;
@@ -55,6 +71,7 @@ export default function Home() {
   const [role, setRole] = useState<Role>("Nurse");
   const [sdoh, setSdoh] = useState<SdohRow[]>([]);
   const [sdohLoading, setSdohLoading] = useState(false);
+  const [actions, setActions] = useState<AutoAction[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -78,17 +95,27 @@ export default function Home() {
   useEffect(() => {
     if (!selectedId) {
       setSdoh([]);
+      setActions([]);
       return;
     }
     setSdohLoading(true);
     (async () => {
-      const { data, error } = await supabase
-        .from("sdoh_screening")
-        .select("*")
-        .eq("patient_id", selectedId)
-        .order("created_at", { ascending: true });
-      if (error) console.error(error);
-      setSdoh((data ?? []) as SdohRow[]);
+      const [sdohRes, actionsRes] = await Promise.all([
+        supabase
+          .from("sdoh_screening")
+          .select("*")
+          .eq("patient_id", selectedId)
+          .order("created_at", { ascending: true }),
+        supabase
+          .from("auto_actions")
+          .select("*")
+          .eq("patient_id", selectedId)
+          .order("created_at", { ascending: true }),
+      ]);
+      if (sdohRes.error) console.error(sdohRes.error);
+      if (actionsRes.error) console.error(actionsRes.error);
+      setSdoh((sdohRes.data ?? []) as SdohRow[]);
+      setActions((actionsRes.data ?? []) as AutoAction[]);
       setSdohLoading(false);
     })();
   }, [selectedId]);
@@ -242,6 +269,7 @@ export default function Home() {
               {activeTab === "day1" ? (
                 <Day1Intake
                   sdoh={sdoh}
+                  actions={actions}
                   loading={sdohLoading}
                   riskCounts={riskCounts}
                 />
@@ -266,10 +294,12 @@ export default function Home() {
 
 function Day1Intake({
   sdoh,
+  actions,
   loading,
   riskCounts,
 }: {
   sdoh: SdohRow[];
+  actions: AutoAction[];
   loading: boolean;
   riskCounts: { high: number; moderate: number; low: number };
 }) {
@@ -290,52 +320,91 @@ function Day1Intake({
   }
 
   return (
-    <section>
-      <div className="flex items-baseline justify-between mb-4">
-        <h2 className="text-base font-semibold text-slate-900">
-          Social Determinants of Health — Day 1 Screening
-        </h2>
-      </div>
+    <div className="space-y-10">
+      <section>
+        <div className="flex items-baseline justify-between mb-4">
+          <h2 className="text-base font-semibold text-slate-900">
+            Social Determinants of Health — Day 1 Screening
+          </h2>
+        </div>
 
-      <div className="flex items-center gap-2 mb-5">
-        <RiskPill count={riskCounts.high} label="high" risk="high" />
-        <span className="text-slate-300">·</span>
-        <RiskPill
-          count={riskCounts.moderate}
-          label="moderate"
-          risk="moderate"
-        />
-        <span className="text-slate-300">·</span>
-        <RiskPill count={riskCounts.low} label="low" risk="low" />
-      </div>
+        <div className="flex items-center gap-2 mb-5">
+          <RiskPill count={riskCounts.high} label="high" risk="high" />
+          <span className="text-slate-300">·</span>
+          <RiskPill
+            count={riskCounts.moderate}
+            label="moderate"
+            risk="moderate"
+          />
+          <span className="text-slate-300">·</span>
+          <RiskPill count={riskCounts.low} label="low" risk="low" />
+        </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {sdoh.map((row) => (
-          <Card
-            key={row.id}
-            className="p-4 border border-slate-200 bg-white"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div className="font-semibold text-sm text-slate-900">
-                {row.domain}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {sdoh.map((row) => (
+            <Card
+              key={row.id}
+              className="p-4 border border-slate-200 bg-white"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="font-semibold text-sm text-slate-900">
+                  {row.domain}
+                </div>
+                <Badge
+                  variant="secondary"
+                  className={cn(
+                    "text-[10px] uppercase tracking-wide shrink-0 border",
+                    RISK_STYLES[row.risk]
+                  )}
+                >
+                  {row.risk}
+                </Badge>
               </div>
-              <Badge
-                variant="secondary"
-                className={cn(
-                  "text-[10px] uppercase tracking-wide shrink-0 border",
-                  RISK_STYLES[row.risk]
-                )}
-              >
-                {row.risk}
-              </Badge>
-            </div>
-            <p className="text-sm text-slate-600 mt-2 leading-relaxed">
-              {row.detail}
-            </p>
+              <p className="text-sm text-slate-600 mt-2 leading-relaxed">
+                {row.detail}
+              </p>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      {actions.length > 0 && (
+        <section>
+          <h3 className="text-sm font-semibold text-slate-900 mb-3">
+            In Progress
+          </h3>
+          <Card className="border border-slate-200 bg-white overflow-hidden">
+            <ul className="divide-y divide-slate-100">
+              {actions.map((a) => {
+                const Icon = ACTION_ICONS[a.icon] ?? CheckCircle;
+                return (
+                  <li
+                    key={a.id}
+                    className="flex items-start gap-4 px-4 py-3.5"
+                  >
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-semibold uppercase tracking-wide shrink-0 mt-0.5">
+                      <Zap className="h-3 w-3" />
+                      Auto
+                    </span>
+                    <span className="h-8 w-8 rounded-md bg-slate-50 border border-slate-200 grid place-items-center shrink-0">
+                      <Icon className="h-4 w-4 text-slate-600" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-slate-900">
+                        {a.label}
+                      </div>
+                      <div className="text-xs text-slate-500 mt-0.5">
+                        {a.detail}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           </Card>
-        ))}
-      </div>
-    </section>
+        </section>
+      )}
+    </div>
   );
 }
 
