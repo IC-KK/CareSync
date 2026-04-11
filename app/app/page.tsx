@@ -92,7 +92,7 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
-type Role = "Nurse" | "Case Coordinator" | "COO";
+type Role = "RN" | "Case Manager" | "Transitions RN" | "COO";
 
 const STATUS_STYLES: Record<Patient["status"], string> = {
   admitted: "bg-blue-100 text-blue-800 hover:bg-blue-100",
@@ -112,7 +112,7 @@ export default function Home() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>("day1");
-  const [role, setRole] = useState<Role>("Nurse");
+  const [role, setRole] = useState<Role>("RN");
   const [sdoh, setSdoh] = useState<SdohRow[]>([]);
   const [sdohLoading, setSdohLoading] = useState(false);
   const [actions, setActions] = useState<AutoAction[]>([]);
@@ -214,14 +214,13 @@ export default function Home() {
               value={role}
               onValueChange={(v) => setRole(v as Role)}
             >
-              <SelectTrigger className="h-9 min-w-[160px] text-sm font-medium text-slate-700 bg-white border-slate-200">
+              <SelectTrigger className="h-9 w-48 text-sm font-medium text-slate-700 bg-white border-slate-200">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Nurse">Nurse</SelectItem>
-                <SelectItem value="Case Coordinator">
-                  Case Coordinator
-                </SelectItem>
+                <SelectItem value="RN">RN</SelectItem>
+                <SelectItem value="Case Manager">Case Manager</SelectItem>
+                <SelectItem value="Transitions RN">Transitions RN</SelectItem>
                 <SelectItem value="COO">COO</SelectItem>
               </SelectContent>
             </Select>
