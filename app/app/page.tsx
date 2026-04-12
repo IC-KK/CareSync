@@ -357,7 +357,10 @@ export default function Home() {
                 />
               )}
               {activeTab === "discharge" && (
-                <DischargeReadiness barriers={barriers} />
+                <div className="space-y-10">
+                  <DischargeReadiness barriers={barriers} />
+                  <DigitalTwin patient={selected} />
+                </div>
               )}
               {(activeTab === "post" || activeTab === "exec") && (
                 <Card className="p-8 border-dashed border-slate-300 bg-white">
@@ -766,5 +769,266 @@ function RiskPill({
       <span className="tabular-nums font-semibold">{count}</span>
       <span>{label}</span>
     </span>
+  );
+}
+
+const SEVERITY_OPTIONS = [
+  { value: "1", label: "1 — Minor" },
+  { value: "2", label: "2 — Moderate" },
+  { value: "3", label: "3 — Major" },
+  { value: "4", label: "4 — Extreme" },
+];
+
+const ADMISSION_OPTIONS = [
+  { value: "Emergency", label: "Emergency" },
+  { value: "Urgent", label: "Urgent" },
+  { value: "Elective", label: "Elective" },
+  { value: "Trauma", label: "Trauma" },
+];
+
+function DigitalTwin({ patient }: { patient: Patient }) {
+  const [severity, setSeverity] = useState<number>(patient.apr_severity ?? 3);
+  const [rom, setRom] = useState<number>(patient.apr_rom ?? 3);
+  const [admissionType, setAdmissionType] = useState<string>(
+    patient.admission_type ?? "Emergency"
+  );
+  const [prediction, setPrediction] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSeverity(patient.apr_severity ?? 3);
+    setRom(patient.apr_rom ?? 3);
+    setAdmissionType(patient.admission_type ?? "Emergency");
+    setPrediction(null);
+    setError(null);
+  }, [
+    patient.id,
+    patient.apr_severity,
+    patient.apr_rom,
+    patient.admission_type,
+  ]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const res = await fetch("/api/predict-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            age_group: patient.age_group ?? "",
+            gender: patient.gender ?? "",
+            race: patient.race ?? "",
+            ethnicity: patient.ethnicity ?? "",
+            admission_type: admissionType,
+            med_surg: patient.med_surg ?? "",
+            health_service_area: patient.health_service_area ?? "",
+            zip3: patient.zip3 ?? "",
+            ccs_dx: patient.ccs_dx ?? "",
+            ccs_proc: patient.ccs_proc ?? "",
+            apr_drg: patient.apr_drg ?? "",
+            apr_severity: severity,
+            apr_rom: rom,
+          }),
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          setError("Prediction service unavailable — showing baseline");
+          setPrediction(null);
+        } else {
+          const data = (await res.json()) as { prediction: number };
+          setPrediction(data.prediction);
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Prediction service unavailable — showing baseline");
+          setPrediction(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    severity,
+    rom,
+    admissionType,
+    patient.id,
+    patient.age_group,
+    patient.gender,
+    patient.race,
+    patient.ethnicity,
+    patient.med_surg,
+    patient.health_service_area,
+    patient.zip3,
+    patient.ccs_dx,
+    patient.ccs_proc,
+    patient.apr_drg,
+  ]);
+
+  const baseline = patient.los_baseline_days ?? patient.los_predicted_days;
+  const displayed = prediction ?? baseline;
+  const delta = displayed - baseline;
+  const belowBaseline = delta < 0;
+  const aboveBaseline = delta > 0;
+
+  const handleReset = () => {
+    setSeverity(patient.apr_severity ?? 3);
+    setRom(patient.apr_rom ?? 3);
+    setAdmissionType(patient.admission_type ?? "Emergency");
+  };
+
+  return (
+    <section>
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Discharge Simulator
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Adjust clinical inputs to model length of stay
+        </p>
+      </div>
+
+      <Card className="p-5 border border-slate-200 bg-white">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <TwinField label="APR Severity">
+            <Select
+              value={String(severity)}
+              onValueChange={(v) => setSeverity(Number(v))}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-9 w-full text-sm bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SEVERITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </TwinField>
+
+          <TwinField label="APR Risk of Mortality">
+            <Select
+              value={String(rom)}
+              onValueChange={(v) => setRom(Number(v))}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-9 w-full text-sm bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SEVERITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </TwinField>
+
+          <TwinField label="Admission Type">
+            <Select
+              value={admissionType}
+              onValueChange={(v) => v && setAdmissionType(v)}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-9 w-full text-sm bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ADMISSION_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </TwinField>
+        </div>
+
+        <Separator className="my-5" />
+
+        <div className="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">
+              Predicted Length of Stay
+            </div>
+            <div className="flex items-baseline gap-3">
+              <div
+                className={cn(
+                  "text-4xl font-semibold tabular-nums",
+                  error
+                    ? "text-slate-400"
+                    : belowBaseline
+                      ? "text-emerald-600"
+                      : aboveBaseline
+                        ? "text-amber-600"
+                        : "text-slate-900"
+                )}
+              >
+                {loading ? "…" : `${displayed.toFixed(1)} days`}
+              </div>
+              {!loading && !error && prediction !== null && delta !== 0 && (
+                <div
+                  className={cn(
+                    "text-sm font-medium tabular-nums",
+                    belowBaseline ? "text-emerald-600" : "text-amber-600"
+                  )}
+                >
+                  {delta > 0 ? "+" : "−"}
+                  {Math.abs(delta).toFixed(1)} days
+                </div>
+              )}
+            </div>
+            <div className="text-xs text-slate-500 mt-1 tabular-nums">
+              Baseline: {baseline.toFixed(1)} days
+            </div>
+          </div>
+
+          <div className="flex flex-col items-end gap-2">
+            {loading && (
+              <span className="text-xs text-slate-500">Calculating…</span>
+            )}
+            {error && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">
+                <AlertCircle className="h-3 w-3" />
+                {error}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={loading}
+              className="text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 bg-white rounded-md px-3 h-8 transition-colors disabled:opacity-50"
+            >
+              Reset to patient defaults
+            </button>
+          </div>
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function TwinField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-slate-600 mb-1.5">{label}</div>
+      {children}
+    </div>
   );
 }
