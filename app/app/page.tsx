@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Lock,
   Pill,
@@ -11,6 +11,9 @@ import {
   Zap,
   Clock,
   AlertCircle,
+  PhoneCall,
+  AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import { supabase, type Patient } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
@@ -362,12 +365,14 @@ export default function Home() {
                   <DigitalTwin patient={selected} />
                 </div>
               )}
-              {(activeTab === "post" || activeTab === "exec") && (
+              {activeTab === "post" && (
+                <PostDischargeTab role={role} />
+              )}
+              {activeTab === "exec" && (
                 <Card className="p-8 border-dashed border-slate-300 bg-white">
                   <div className="text-sm text-slate-400">
-                    [{TABS.find((t) => t.id === activeTab)?.label}] content for{" "}
-                    {selected.full_name} — coming in a later phase. Role:{" "}
-                    {role}.
+                    [Executive] content for {selected.full_name} — coming in a
+                    later phase. Role: {role}.
                   </div>
                 </Card>
               )}
@@ -1037,6 +1042,214 @@ function TwinField({
     <div>
       <div className="text-xs font-medium text-slate-600 mb-1.5">{label}</div>
       {children}
+    </div>
+  );
+}
+
+type CallState = "idle" | "calling" | "in-progress" | "completed" | "error";
+
+function PostDischargeTab({ role }: { role: Role }) {
+  const [callState, setCallState] = useState<CallState>("idle");
+  const [elapsed, setElapsed] = useState(0);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startRef = useRef(0);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const startCall = async () => {
+    setCallState("calling");
+    setErrorMsg(null);
+    setElapsed(0);
+
+    try {
+      const res = await fetch("/api/trigger-call", { method: "POST" });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Unknown error" }));
+        setErrorMsg(body.error ?? "Call failed");
+        setCallState("error");
+        return;
+      }
+
+      setCallState("in-progress");
+      startRef.current = Date.now();
+      timerRef.current = setInterval(() => {
+        const secs = Math.floor((Date.now() - startRef.current) / 1000);
+        setElapsed(secs);
+        if (secs >= 130) {
+          endCall();
+        }
+      }, 1000);
+    } catch {
+      setErrorMsg("Network error — could not reach server");
+      setCallState("error");
+    }
+  };
+
+  const endCall = useCallback(() => {
+    clearTimer();
+    setCallState("completed");
+  }, [clearTimer]);
+
+  const fmtTime = (s: number) =>
+    `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+
+  if (role !== "Transitions RN") {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="text-sm text-slate-400 text-center max-w-sm">
+          Switch to Transitions RN role to view post-discharge patients.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Evelyn Carter patient card */}
+      <Card className="p-5 border border-slate-200 bg-white">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-lg font-semibold text-slate-900">
+              Evelyn Carter
+            </div>
+            <div className="text-sm text-slate-500 mt-1">
+              72 F · Heart Failure (HFrEF) · Discharged yesterday
+            </div>
+            <div className="text-sm text-slate-500 mt-1">
+              Follow-up: Cardiology appt in 5 days · Caregiver: Daughter (lives
+              nearby)
+            </div>
+          </div>
+          <div className="flex flex-col items-end gap-2 shrink-0">
+            <Badge
+              variant="secondary"
+              className="bg-sky-100 text-sky-800 border border-sky-200 text-[10px] hover:bg-sky-100"
+            >
+              Post-Discharge Day 1
+            </Badge>
+            <Badge
+              variant="secondary"
+              className="bg-rose-100 text-rose-800 border border-rose-200 text-[10px] hover:bg-rose-100"
+            >
+              Readmission Risk: High
+            </Badge>
+          </div>
+        </div>
+      </Card>
+
+      {/* Call section */}
+      <Card className="p-5 border border-slate-200 bg-white">
+        <h3 className="text-sm font-semibold text-slate-900">
+          Post-Discharge Follow-Up Call
+        </h3>
+        <p className="text-xs text-slate-500 mt-1 mb-5">
+          AI-assisted symptom screening and medication adherence check
+        </p>
+        <Separator className="mb-5" />
+
+        <div className="flex flex-col items-center gap-4">
+          {callState === "idle" && (
+            <button
+              type="button"
+              onClick={startCall}
+              className="inline-flex items-center gap-2 px-6 h-12 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded-lg transition-colors"
+            >
+              <PhoneCall className="h-5 w-5" />
+              Call Evelyn Carter
+            </button>
+          )}
+
+          {callState === "calling" && (
+            <button
+              type="button"
+              disabled
+              className="inline-flex items-center gap-2 px-6 h-12 bg-slate-200 text-slate-500 font-semibold text-sm rounded-lg cursor-not-allowed"
+            >
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Connecting…
+            </button>
+          )}
+
+          {callState === "in-progress" && (
+            <div className="flex flex-col items-center gap-3">
+              <div className="inline-flex items-center gap-2 px-6 h-12 bg-slate-100 text-slate-700 font-semibold text-sm rounded-lg">
+                <span className="relative flex h-3 w-3">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-500" />
+                </span>
+                Call in Progress
+                <span className="font-mono tabular-nums text-slate-500 ml-2">
+                  {fmtTime(elapsed)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={endCall}
+                className="text-xs text-slate-500 underline hover:text-slate-700"
+              >
+                End Call
+              </button>
+            </div>
+          )}
+
+          {callState === "completed" && (
+            <div className="inline-flex items-center gap-2 px-6 h-12 bg-slate-100 text-slate-700 font-semibold text-sm rounded-lg">
+              <CheckCircle className="h-5 w-5 text-emerald-600" />
+              Call Complete
+              <span className="font-mono tabular-nums text-slate-500 ml-2">
+                {fmtTime(elapsed)}
+              </span>
+            </div>
+          )}
+
+          {callState === "error" && (
+            <div className="flex flex-col items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {errorMsg}
+              </span>
+              <button
+                type="button"
+                onClick={() => setCallState("idle")}
+                className="text-xs text-slate-500 underline hover:text-slate-700"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Escalation alert — shown after call completes */}
+      {callState === "completed" && (
+        <div className="rounded-lg bg-rose-50 border border-rose-200 border-l-4 border-l-rose-500 p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="font-semibold text-sm text-rose-900">
+                ESCALATION: Symptom Flag Detected
+              </div>
+              <p className="text-sm text-rose-700 mt-1 leading-relaxed">
+                Evelyn Carter reported shortness of breath during post-discharge
+                follow-up call. Flagged for immediate care team review.
+                Transitions RN notified.
+              </p>
+              <div className="text-xs text-rose-500 mt-2 tabular-nums">
+                {new Date().toLocaleTimeString()} —{" "}
+                {new Date().toLocaleDateString()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
