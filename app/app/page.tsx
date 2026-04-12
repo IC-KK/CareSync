@@ -338,18 +338,20 @@ export default function Home() {
         <main className="flex-1 p-8 overflow-y-auto">
           {selected ? (
             <div>
-              <div className="mb-6">
-                <div className="text-xs uppercase tracking-wider text-slate-500">
-                  {TABS.find((t) => t.id === activeTab)?.label}
+              {activeTab !== "post" && activeTab !== "exec" && (
+                <div className="mb-6">
+                  <div className="text-xs uppercase tracking-wider text-slate-500">
+                    {TABS.find((t) => t.id === activeTab)?.label}
+                  </div>
+                  <h1 className="text-2xl font-semibold mt-1">
+                    {selected.full_name}
+                  </h1>
+                  <div className="text-sm text-slate-500 mt-1">
+                    {selected.mrn} · {selected.age} {selected.sex} · Room{" "}
+                    {selected.room} · {selected.dx_primary}
+                  </div>
                 </div>
-                <h1 className="text-2xl font-semibold mt-1">
-                  {selected.full_name}
-                </h1>
-                <div className="text-sm text-slate-500 mt-1">
-                  {selected.mrn} · {selected.age} {selected.sex} · Room{" "}
-                  {selected.room} · {selected.dx_primary}
-                </div>
-              </div>
+              )}
               {activeTab === "day1" && (
                 <Day1Intake
                   sdoh={sdoh}
