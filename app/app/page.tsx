@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Lock,
+  Unlock,
   Pill,
   Car,
   Calendar,
   BookOpen,
   CheckCircle,
+  XCircle,
   Zap,
   Clock,
   AlertCircle,
@@ -363,7 +365,10 @@ export default function Home() {
               )}
               {activeTab === "discharge" && (
                 <div className="space-y-10">
+                  <ReadinessSummary barriers={barriers} role={role} />
+                  <Separator />
                   <DischargeReadiness barriers={barriers} />
+                  <Separator />
                   <DigitalTwin patient={selected} />
                 </div>
               )}
@@ -533,6 +538,119 @@ function Day1Intake({
         </section>
       )}
     </div>
+  );
+}
+
+const CHECKLIST_ITEMS = [
+  { label: "Meds Reconciled", status: "done" as const },
+  { label: "Transport Confirmed", status: "blocked" as const },
+  { label: "Follow-up Booked", status: "done" as const },
+  { label: "Patient Education", status: "in-progress" as const },
+];
+
+function ReadinessSummary({
+  barriers,
+  role,
+}: {
+  barriers: Barrier[];
+  role: Role;
+}) {
+  const [authorized, setAuthorized] = useState(false);
+
+  const total = barriers.length;
+  const resolved = barriers.filter((b) => b.status === "resolved").length;
+  const score = total > 0 ? Math.round((resolved / total) * 100) : 0;
+
+  const allChecklistDone = CHECKLIST_ITEMS.every((c) => c.status === "done");
+  const canDischarge = score === 100 && allChecklistDone;
+
+  let scoreColor = "text-rose-600";
+  let scoreLabel = "Not Ready";
+  if (score === 100) {
+    scoreColor = "text-emerald-600";
+    scoreLabel = "Ready for Discharge";
+  } else if (score >= 80) {
+    scoreColor = "text-sky-600";
+    scoreLabel = "Nearly Ready";
+  } else if (score >= 50) {
+    scoreColor = "text-amber-600";
+    scoreLabel = "In Progress";
+  }
+
+  return (
+    <section>
+      <div className="flex flex-col items-center text-center gap-1 mb-6">
+        <div className="text-xs uppercase tracking-wider text-slate-500">
+          Discharge Readiness
+        </div>
+        <div className={cn("text-5xl font-bold tabular-nums", scoreColor)}>
+          {score}%
+        </div>
+        <div className={cn("text-sm font-medium", scoreColor)}>
+          {scoreLabel}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-center gap-3 mb-6">
+        {CHECKLIST_ITEMS.map((item) => (
+          <div
+            key={item.label}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 bg-white"
+          >
+            {item.status === "done" && (
+              <CheckCircle className="h-4 w-4 text-emerald-500" />
+            )}
+            {item.status === "blocked" && (
+              <XCircle className="h-4 w-4 text-rose-500" />
+            )}
+            {item.status === "in-progress" && (
+              <Clock className="h-4 w-4 text-amber-500" />
+            )}
+            <span className="text-sm font-medium text-slate-700">
+              {item.label}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {role === "Case Manager" && (
+        <div className="mb-2">
+          {authorized ? (
+            <div className="w-full py-4 rounded-lg bg-emerald-100 border border-emerald-300 text-emerald-800 text-lg font-semibold text-center flex items-center justify-center gap-2">
+              <CheckCircle className="h-5 w-5" />
+              Discharge Authorized ✓
+              <span className="text-sm font-normal text-emerald-600 ml-2">
+                {new Date().toLocaleTimeString()}
+              </span>
+            </div>
+          ) : (
+            <button
+              type="button"
+              disabled={!canDischarge}
+              onClick={() => setAuthorized(true)}
+              className={cn(
+                "w-full py-4 rounded-lg text-lg font-semibold flex items-center justify-center gap-2 transition-colors",
+                canDischarge
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-slate-200 text-slate-500 cursor-not-allowed"
+              )}
+            >
+              {canDischarge ? (
+                <>
+                  <Unlock className="h-5 w-5" />
+                  Authorize Discharge
+                </>
+              ) : (
+                <>
+                  <Lock className="h-5 w-5" />
+                  Discharge Blocked — Resolve Open Barriers
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
