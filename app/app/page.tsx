@@ -911,12 +911,8 @@ function DigitalTwin({ patient }: { patient: Patient }) {
   risk = Math.max(5, Math.min(55, risk));
 
   const costPerDay = 2750;
-  const costSaved = diff < 0 ? Math.abs(diff) * costPerDay : 0;
-  const costAdded = diff > 0 ? diff * costPerDay : 0;
-  const bedDays = Math.abs(diff);
 
   const riskColor = risk > 25 ? "text-rose-600" : risk > 15 ? "text-amber-600" : "text-emerald-600";
-  const costColor = diff <= 0 ? "text-emerald-600" : "text-rose-600";
   const optimal = Math.abs(diff) < 0.5;
 
   const minDay = Math.max(1, patient.los_actual_days - 1);
@@ -974,7 +970,7 @@ function DigitalTwin({ patient }: { patient: Patient }) {
 
           <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              "Clinical Stability Window"
+              &quot;Clinical Stability Window&quot;
             </div>
             <div className={cn("text-3xl font-bold tabular-nums mt-1", diff <= 0 ? "text-green-600" : "text-amber-600")}>
               {diff <= 0 ? "Within Window" : "Extended"}
@@ -986,7 +982,7 @@ function DigitalTwin({ patient }: { patient: Patient }) {
 
           <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
             <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              "Days vs AI Target"
+              &quot;Days vs AI Target&quot;
             </div>
             <div className={cn("text-3xl font-bold tabular-nums mt-1", diff <= 0 ? "text-green-600" : "text-amber-600")}>
               {diff === 0 ? "On Target" : diff < 0 ? `${Math.abs(diff).toFixed(1)}d early` : `${diff.toFixed(1)}d over`}
