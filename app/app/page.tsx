@@ -894,6 +894,37 @@ function RiskPill({
   );
 }
 
+const ADMISSION_OPTIONS = [
+  { value: "Emergency", label: "Emergency" },
+  { value: "Urgent", label: "Urgent" },
+  { value: "Elective", label: "Elective" },
+  { value: "Trauma", label: "Trauma" },
+];
+
+const SEVERITY_OPTIONS = [
+  { value: "1", label: "1 — Minor" },
+  { value: "2", label: "2 — Moderate" },
+  { value: "3", label: "3 — Major" },
+  { value: "4", label: "4 — Extreme" },
+];
+
+function TwinField({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-medium text-slate-600 mb-1.5">{label}</div>
+      {children}
+    </div>
+  );
+}
+
+type CallState = "idle" | "calling" | "in-progress" | "completed" | "error";
+
 function DigitalTwin({ patient }: { patient: Patient }) {
   const [severity, setSeverity] = useState<number>(patient.apr_severity ?? 3);
   const [rom, setRom] = useState<number>(patient.apr_rom ?? 3);
