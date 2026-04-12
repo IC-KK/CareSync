@@ -29,3 +29,25 @@ export type Patient = {
   is_hero: boolean;
   created_at: string;
 };
+
+export type PredictPreviewRequest = {
+  age_group?: string;
+  gender?: string;
+  race?: string;
+  ethnicity?: string;
+  admission_type?: string;
+  med_surg?: string;
+  health_service_area?: string;
+  zip3?: string;
+  ccs_dx?: string;
+  ccs_proc?: string;
+  apr_drg?: string;
+  apr_severity?: number;
+  apr_rom?: number;
+};
+
+export type PredictPreviewResponse = {
+  status: string;
+  prediction: number;
+  model_version: string;
+};
