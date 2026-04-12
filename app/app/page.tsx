@@ -1,7 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Lock, Pill, Car, Calendar, BookOpen, CheckCircle, Zap } from "lucide-react";
+import {
+  Lock,
+  Pill,
+  Car,
+  Calendar,
+  BookOpen,
+  CheckCircle,
+  Zap,
+  Clock,
+  AlertCircle,
+} from "lucide-react";
 import { supabase, type Patient } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -69,6 +79,20 @@ const DAISY_TIMELINE = [
   },
 ];
 
+type Barrier = {
+  id: string;
+  patient_id: string;
+  type: string;
+  detail: string;
+  severity: "high" | "moderate" | "low";
+  next_step: string;
+  source: string;
+  sla_hours: number;
+  hours_open: number;
+  status: "open" | "in_progress" | "resolved";
+  created_at: string;
+};
+
 type SdohRow = {
   id: string;
   patient_id: string;
@@ -116,6 +140,7 @@ export default function Home() {
   const [sdoh, setSdoh] = useState<SdohRow[]>([]);
   const [sdohLoading, setSdohLoading] = useState(false);
   const [actions, setActions] = useState<AutoAction[]>([]);
+  const [barriers, setBarriers] = useState<Barrier[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -140,11 +165,12 @@ export default function Home() {
     if (!selectedId) {
       setSdoh([]);
       setActions([]);
+      setBarriers([]);
       return;
     }
     setSdohLoading(true);
     (async () => {
-      const [sdohRes, actionsRes] = await Promise.all([
+      const [sdohRes, actionsRes, barriersRes] = await Promise.all([
         supabase
           .from("sdoh_screening")
           .select("*")
@@ -155,11 +181,17 @@ export default function Home() {
           .select("*")
           .eq("patient_id", selectedId)
           .order("created_at", { ascending: true }),
+        supabase
+          .from("barriers")
+          .select("*")
+          .eq("patient_id", selectedId),
       ]);
       if (sdohRes.error) console.error(sdohRes.error);
       if (actionsRes.error) console.error(actionsRes.error);
+      if (barriersRes.error) console.error(barriersRes.error);
       setSdoh((sdohRes.data ?? []) as SdohRow[]);
       setActions((actionsRes.data ?? []) as AutoAction[]);
+      setBarriers((barriersRes.data ?? []) as Barrier[]);
       setSdohLoading(false);
     })();
   }, [selectedId]);
@@ -315,7 +347,7 @@ export default function Home() {
                   {selected.room} · {selected.dx_primary}
                 </div>
               </div>
-              {activeTab === "day1" ? (
+              {activeTab === "day1" && (
                 <Day1Intake
                   sdoh={sdoh}
                   actions={actions}
@@ -323,7 +355,11 @@ export default function Home() {
                   riskCounts={riskCounts}
                   patientMrn={selected.mrn}
                 />
-              ) : (
+              )}
+              {activeTab === "discharge" && (
+                <DischargeReadiness barriers={barriers} />
+              )}
+              {(activeTab === "post" || activeTab === "exec") && (
                 <Card className="p-8 border-dashed border-slate-300 bg-white">
                   <div className="text-sm text-slate-400">
                     [{TABS.find((t) => t.id === activeTab)?.label}] content for{" "}
@@ -487,6 +523,227 @@ function Day1Intake({
         </section>
       )}
     </div>
+  );
+}
+
+function DischargeReadiness({ barriers }: { barriers: Barrier[] }) {
+  if (barriers.length === 0) {
+    return (
+      <div>
+        <h2 className="text-lg font-semibold text-slate-900">
+          Discharge Readiness
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Blockers preventing safe discharge
+        </p>
+        <div className="flex items-center justify-center py-24">
+          <div className="text-sm text-slate-400">
+            No barriers flagged for this patient.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const pctOpen = (b: Barrier) =>
+    b.sla_hours > 0 ? b.hours_open / b.sla_hours : 0;
+
+  const sorted = [...barriers].sort((a, b) => {
+    const aResolved = a.status === "resolved" ? 1 : 0;
+    const bResolved = b.status === "resolved" ? 1 : 0;
+    if (aResolved !== bResolved) return aResolved - bResolved;
+    return pctOpen(b) - pctOpen(a);
+  });
+
+  const counts = {
+    open: barriers.filter((b) => b.status === "open").length,
+    in_progress: barriers.filter((b) => b.status === "in_progress").length,
+    resolved: barriers.filter((b) => b.status === "resolved").length,
+    at_risk: barriers.filter(
+      (b) => b.status !== "resolved" && pctOpen(b) > 0.8
+    ).length,
+  };
+
+  return (
+    <section>
+      <div className="mb-5">
+        <h2 className="text-lg font-semibold text-slate-900">
+          Discharge Readiness
+        </h2>
+        <p className="text-sm text-slate-500 mt-1">
+          Blockers preventing safe discharge
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <StatusPill
+          count={counts.open}
+          label="open"
+          className="bg-slate-100 text-slate-700 border-slate-200"
+        />
+        <span className="text-slate-300">·</span>
+        <StatusPill
+          count={counts.in_progress}
+          label="in progress"
+          className="bg-blue-100 text-blue-800 border-blue-200"
+        />
+        <span className="text-slate-300">·</span>
+        <StatusPill
+          count={counts.resolved}
+          label="resolved"
+          className="bg-green-100 text-green-800 border-green-200"
+        />
+        <span className="text-slate-300">·</span>
+        <StatusPill
+          count={counts.at_risk}
+          label="at risk"
+          className="bg-red-100 text-red-800 border-red-200"
+          icon={<AlertCircle className="h-3 w-3" />}
+        />
+      </div>
+
+      <div className="space-y-3">
+        {sorted.map((b) => (
+          <BarrierCard key={b.id} barrier={b} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BarrierCard({ barrier }: { barrier: Barrier }) {
+  const pct = barrier.sla_hours
+    ? Math.min(100, Math.round((barrier.hours_open / barrier.sla_hours) * 100))
+    : 0;
+  const ratio = barrier.sla_hours ? barrier.hours_open / barrier.sla_hours : 0;
+  const remaining = Math.max(0, barrier.sla_hours - barrier.hours_open);
+  const pastSla = barrier.hours_open > barrier.sla_hours;
+
+  const isResolved = barrier.status === "resolved";
+
+  let barColor = "bg-green-500";
+  if (isResolved) {
+    barColor = "bg-green-500";
+  } else if (ratio > 0.8 || pastSla) {
+    barColor = "bg-red-500";
+  } else if (ratio >= 0.5) {
+    barColor = "bg-amber-500";
+  }
+
+  return (
+    <Card className="p-4 border border-slate-200 bg-white">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wide border border-slate-200">
+              {barrier.source}
+            </span>
+            <StatusChip status={barrier.status} />
+          </div>
+          <div className="mt-2 flex items-start justify-between gap-3">
+            <div className="font-semibold text-sm text-slate-900">
+              {barrier.type}
+            </div>
+          </div>
+          <p className="text-sm text-slate-600 mt-1 leading-relaxed">
+            {barrier.detail}
+          </p>
+          <div className="text-xs text-slate-500 mt-2 flex items-center gap-1.5">
+            <span className="text-slate-400">Next:</span>
+            <span>{barrier.next_step}</span>
+          </div>
+        </div>
+
+        <div className="shrink-0 flex flex-col items-end gap-2 min-w-[160px]">
+          <Badge
+            variant="secondary"
+            className={cn(
+              "text-[10px] uppercase tracking-wide border",
+              RISK_STYLES[barrier.severity]
+            )}
+          >
+            {barrier.severity}
+          </Badge>
+          {!isResolved && (
+            <div className="w-full">
+              <div className="flex items-center justify-between text-[10px] text-slate-500 mb-1">
+                <span className="inline-flex items-center gap-1">
+                  <Clock className="h-3 w-3" />
+                  SLA
+                </span>
+                <span className="tabular-nums">
+                  {barrier.hours_open}h / {barrier.sla_hours}h
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-slate-100 overflow-hidden">
+                <div
+                  className={cn("h-full rounded-full", barColor)}
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
+              <div
+                className={cn(
+                  "text-[10px] mt-1 tabular-nums text-right",
+                  pastSla ? "text-red-600 font-semibold" : "text-slate-500"
+                )}
+              >
+                {pastSla
+                  ? `${(barrier.hours_open - barrier.sla_hours).toFixed(1)}h past SLA`
+                  : `${remaining.toFixed(1)}h remaining`}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function StatusChip({ status }: { status: Barrier["status"] }) {
+  if (status === "resolved") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-800 text-[10px] font-semibold uppercase tracking-wide border border-green-200">
+        <CheckCircle className="h-3 w-3" />
+        Resolved
+      </span>
+    );
+  }
+  if (status === "in_progress") {
+    return (
+      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-[10px] font-semibold uppercase tracking-wide border border-blue-200">
+        In progress
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-semibold uppercase tracking-wide border border-slate-200">
+      Open
+    </span>
+  );
+}
+
+function StatusPill({
+  count,
+  label,
+  className,
+  icon,
+}: {
+  count: number;
+  label: string;
+  className: string;
+  icon?: React.ReactNode;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border",
+        className
+      )}
+    >
+      {icon}
+      <span className="tabular-nums font-semibold">{count}</span>
+      <span>{label}</span>
+    </span>
   );
 }
 
