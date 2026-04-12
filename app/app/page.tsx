@@ -910,7 +910,6 @@ function DigitalTwin({ patient }: { patient: Patient }) {
   let risk = baseRisk + (diff < 0 ? Math.abs(diff) * 8 : diff > 0 ? -diff * 2.5 : 0);
   risk = Math.max(5, Math.min(55, risk));
 
-  const costPerDay = 2750;
 
   const riskColor = risk > 25 ? "text-rose-600" : risk > 15 ? "text-amber-600" : "text-emerald-600";
   const optimal = Math.abs(diff) < 0.5;
