@@ -819,17 +819,25 @@ function DigitalTwin({ patient }: { patient: Patient }) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            age_group: patient.age_group ?? "",
-            gender: patient.gender ?? "",
-            race: patient.race ?? "",
-            ethnicity: patient.ethnicity ?? "",
-            admission_type: admissionType,
-            med_surg: patient.med_surg ?? "",
-            health_service_area: patient.health_service_area ?? "",
-            zip3: patient.zip3 ?? "",
-            ccs_dx: patient.ccs_dx ?? "",
-            ccs_proc: patient.ccs_proc ?? "",
-            apr_drg: patient.apr_drg ?? "",
+            age_group:
+              patient.age_group != null ? String(patient.age_group) : undefined,
+            gender: patient.gender != null ? String(patient.gender) : undefined,
+            race: patient.race != null ? String(patient.race) : undefined,
+            ethnicity:
+              patient.ethnicity != null ? String(patient.ethnicity) : undefined,
+            admission_type: String(admissionType),
+            med_surg:
+              patient.med_surg != null ? String(patient.med_surg) : undefined,
+            health_service_area:
+              patient.health_service_area != null
+                ? String(patient.health_service_area)
+                : undefined,
+            zip3: patient.zip3 != null ? String(patient.zip3) : undefined,
+            ccs_dx: patient.ccs_dx != null ? String(patient.ccs_dx) : undefined,
+            ccs_proc:
+              patient.ccs_proc != null ? String(patient.ccs_proc) : undefined,
+            apr_drg:
+              patient.apr_drg != null ? String(patient.apr_drg) : undefined,
             apr_severity: severity,
             apr_rom: rom,
           }),
