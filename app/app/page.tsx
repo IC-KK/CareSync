@@ -895,117 +895,244 @@ function RiskPill({
 }
 
 function DigitalTwin({ patient }: { patient: Patient }) {
-  const [dischargeDay, setDischargeDay] = useState<number>(
-    Math.round(patient.los_predicted_days)
+  const [severity, setSeverity] = useState<number>(patient.apr_severity ?? 3);
+  const [rom, setRom] = useState<number>(patient.apr_rom ?? 3);
+  const [admissionType, setAdmissionType] = useState<string>(
+    patient.admission_type ?? "Emergency"
   );
+  const [prediction, setPrediction] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setDischargeDay(Math.round(patient.los_predicted_days));
-  }, [patient.id, patient.los_predicted_days]);
+    setSeverity(patient.apr_severity ?? 3);
+    setRom(patient.apr_rom ?? 3);
+    setAdmissionType(patient.admission_type ?? "Emergency");
+    setPrediction(null);
+    setError(null);
+  }, [
+    patient.id,
+    patient.apr_severity,
+    patient.apr_rom,
+    patient.admission_type,
+  ]);
 
-  const aiOptimal = patient.los_predicted_days;
-  const diff = dischargeDay - aiOptimal;
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    (async () => {
+      try {
+        const res = await fetch("/api/predict-preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            age_group:
+              patient.age_group != null ? String(patient.age_group) : undefined,
+            gender: patient.gender != null ? String(patient.gender) : undefined,
+            race: patient.race != null ? String(patient.race) : undefined,
+            ethnicity:
+              patient.ethnicity != null ? String(patient.ethnicity) : undefined,
+            admission_type: String(admissionType),
+            med_surg:
+              patient.med_surg != null ? String(patient.med_surg) : undefined,
+            health_service_area:
+              patient.health_service_area != null
+                ? String(patient.health_service_area)
+                : undefined,
+            zip3: patient.zip3 != null ? String(patient.zip3) : undefined,
+            ccs_dx: patient.ccs_dx != null ? String(patient.ccs_dx) : undefined,
+            ccs_proc:
+              patient.ccs_proc != null ? String(patient.ccs_proc) : undefined,
+            apr_drg:
+              patient.apr_drg != null ? String(patient.apr_drg) : undefined,
+            apr_severity: severity,
+            apr_rom: rom,
+          }),
+        });
+        if (cancelled) return;
+        if (!res.ok) {
+          setError("Prediction service unavailable — showing baseline");
+          setPrediction(null);
+        } else {
+          const data = (await res.json()) as { prediction: number };
+          setPrediction(data.prediction);
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Prediction service unavailable — showing baseline");
+          setPrediction(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    severity,
+    rom,
+    admissionType,
+    patient.id,
+    patient.age_group,
+    patient.gender,
+    patient.race,
+    patient.ethnicity,
+    patient.med_surg,
+    patient.health_service_area,
+    patient.zip3,
+    patient.ccs_dx,
+    patient.ccs_proc,
+    patient.apr_drg,
+  ]);
 
-  const baseRisk = patient.readmission_risk_pct ?? (patient.readmission_risk_tier === "high" ? 28 : patient.readmission_risk_tier === "moderate" ? 18 : 10);
-  let risk = baseRisk + (diff < 0 ? Math.abs(diff) * 8 : diff > 0 ? -diff * 2.5 : 0);
-  risk = Math.max(5, Math.min(55, risk));
+  const baseline = patient.los_baseline_days ?? patient.los_predicted_days;
+  const displayed = prediction ?? baseline;
+  const delta = displayed - baseline;
+  const belowBaseline = delta < 0;
+  const aboveBaseline = delta > 0;
 
-
-  const riskColor = risk > 25 ? "text-rose-600" : risk > 15 ? "text-amber-600" : "text-emerald-600";
-  const optimal = Math.abs(diff) < 0.5;
-
-  const minDay = Math.max(1, patient.los_actual_days - 1);
-  const maxDay = Math.ceil(aiOptimal + 3);
+  const handleReset = () => {
+    setSeverity(patient.apr_severity ?? 3);
+    setRom(patient.apr_rom ?? 3);
+    setAdmissionType(patient.admission_type ?? "Emergency");
+  };
 
   return (
     <section>
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-slate-900">
-          Discharge Scenario Planning
+          Discharge Simulator
         </h2>
         <p className="text-sm text-slate-500 mt-1">
-          Adjust discharge day to model projected outcomes based on patient factors, barrier status, and SDOH profile
+          Adjust clinical inputs to model length of stay
         </p>
       </div>
 
-      <Card className="p-5 border-2 border-indigo-200 bg-indigo-50/30">
-        <div className="mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-sm font-semibold text-slate-900">
-              Discharge Day
-            </label>
-            <span className="text-2xl font-bold text-indigo-700 tabular-nums">
-              Day {dischargeDay}
-            </span>
-          </div>
-          <input
-            type="range"
-            min={minDay}
-            max={maxDay}
-            step={1}
-            value={dischargeDay}
-            onChange={(e) => setDischargeDay(Number(e.target.value))}
-            className="w-full h-2 bg-indigo-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-          />
-          <div className="flex justify-between text-[10px] text-slate-500 mt-1 tabular-nums">
-            <span>Day {minDay}</span>
-            <span className="text-indigo-600 font-semibold">AI optimal: Day {aiOptimal.toFixed(1)}</span>
-            <span>Day {maxDay}</span>
-          </div>
+      <Card className="p-5 border border-slate-200 bg-white">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <TwinField label="APR Severity">
+            <Select
+              value={String(severity)}
+              onValueChange={(v) => setSeverity(Number(v))}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-9 w-full text-sm bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SEVERITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </TwinField>
+
+          <TwinField label="APR Risk of Mortality">
+            <Select
+              value={String(rom)}
+              onValueChange={(v) => setRom(Number(v))}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-9 w-full text-sm bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SEVERITY_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </TwinField>
+
+          <TwinField label="Admission Type">
+            <Select
+              value={admissionType}
+              onValueChange={(v) => v && setAdmissionType(v)}
+              disabled={loading}
+            >
+              <SelectTrigger className="h-9 w-full text-sm bg-white border-slate-200">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {ADMISSION_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </TwinField>
         </div>
 
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              Readmission Risk
+        <Separator className="my-5" />
+
+        <div className="flex items-end justify-between gap-6 flex-wrap">
+          <div>
+            <div className="text-xs uppercase tracking-wider text-slate-500 mb-1">
+              Predicted Length of Stay
             </div>
-            <div className={cn("text-3xl font-bold tabular-nums mt-1", riskColor)}>
-              {risk.toFixed(0)}%
+            <div className="flex items-baseline gap-3">
+              <div
+                className={cn(
+                  "text-4xl font-semibold tabular-nums",
+                  error
+                    ? "text-slate-400"
+                    : belowBaseline
+                      ? "text-emerald-600"
+                      : aboveBaseline
+                        ? "text-amber-600"
+                        : "text-slate-900"
+                )}
+              >
+                {loading ? "…" : `${displayed.toFixed(1)} days`}
+              </div>
+              {!loading && !error && prediction !== null && delta !== 0 && (
+                <div
+                  className={cn(
+                    "text-sm font-medium tabular-nums",
+                    belowBaseline ? "text-emerald-600" : "text-amber-600"
+                  )}
+                >
+                  {delta > 0 ? "+" : "−"}
+                  {Math.abs(delta).toFixed(1)} days
+                </div>
+              )}
             </div>
-            <div className="text-[10px] text-slate-500 mt-1">
-              {optimal ? "At AI-optimal day" : diff < 0 ? "\u2191 Early discharge risk" : "\u2193 Extended stay benefit"}
+            <div className="text-xs text-slate-500 mt-1 tabular-nums">
+              Baseline: {baseline.toFixed(1)} days
             </div>
           </div>
 
-          <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              &quot;Clinical Stability Window&quot;
-            </div>
-            <div className={cn("text-3xl font-bold tabular-nums mt-1", diff <= 0 ? "text-green-600" : "text-amber-600")}>
-              {diff <= 0 ? "Within Window" : "Extended"}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">
-              at $2,750/day (Medicare FFS)
-            </div>
+          <div className="flex flex-col items-end gap-2">
+            {loading && (
+              <span className="text-xs text-slate-500">Calculating…</span>
+            )}
+            {error && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-100 text-amber-800 border-amber-200">
+                <AlertCircle className="h-3 w-3" />
+                {error}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={handleReset}
+              disabled={loading}
+              className="text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 bg-white rounded-md px-3 h-8 transition-colors disabled:opacity-50"
+            >
+              Reset to patient defaults
+            </button>
           </div>
-
-          <div className="bg-white rounded-lg border border-slate-200 p-4 text-center">
-            <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-              &quot;Days vs AI Target&quot;
-            </div>
-            <div className={cn("text-3xl font-bold tabular-nums mt-1", diff <= 0 ? "text-green-600" : "text-amber-600")}>
-              {diff === 0 ? "On Target" : diff < 0 ? `${Math.abs(diff).toFixed(1)}d early` : `${diff.toFixed(1)}d over`}
-            </div>
-            <div className="text-[10px] text-slate-500 mt-1">
-              {optimal ? "Optimal window" : "vs AI-adjusted LOS"}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-4 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setDischargeDay(Math.round(aiOptimal))}
-            className="text-xs font-medium text-slate-600 hover:text-slate-900 border border-slate-200 bg-white rounded-md px-3 h-8 transition-colors"
-          >
-            Reset to AI optimal
-          </button>
         </div>
       </Card>
     </section>
   );
 }
-
 
 function ExecutiveDashboard({ role }: { role: Role }) {
   if (role !== "COO") {
