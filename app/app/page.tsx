@@ -1380,7 +1380,6 @@ function ExecutiveDashboard({ role }: { role: Role }) {
 }
 
 
-type CallState = "idle" | "calling" | "in-progress" | "completed" | "error";
 
 function PostDischargeTab({ role }: { role: Role }) {
   const [callState, setCallState] = useState<CallState>("idle");
